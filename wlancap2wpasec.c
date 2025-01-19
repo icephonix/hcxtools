@@ -1,18 +1,12 @@
 #define _GNU_SOURCE
-#include <stdarg.h>
-#include <stdint.h>
+#include <libgen.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
-#include <unistd.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
-#if defined (__APPLE__) || defined(__OpenBSD__)
-#include <libgen.h>
-#else
-#include <stdio_ext.h>
-#endif
 #include <curl/curl.h>
 
 /*===========================================================================*/
@@ -28,12 +22,12 @@ static long int uploadcountok;
 static long int uploadcountfailed;
 static const char *wpasecurl = "https://wpa-sec.stanev.org";
 static bool removeflag = false;
-struct memory *curlmem;
+static struct memory *curlmem;
 /*===========================================================================*/
 static int testwpasec(long int timeout)
 {
 CURL *curl;
-CURLcode res = 0;
+CURLcode res = CURLE_OK;
 
 fprintf(stdout, "connecting to %s\n", wpasecurl);
 curl_global_init(CURL_GLOBAL_ALL);
@@ -56,9 +50,9 @@ static size_t cb(void *data, size_t size, size_t nmemb, void *userp)
 {
 char *ptr;
 size_t realsize = size *nmemb;
-curlmem = (struct memory *)userp;
+curlmem = (struct memory*)userp;
  
-ptr = realloc(curlmem->response, curlmem->size +realsize +1);
+ptr = (char*)realloc(curlmem->response, curlmem->size +realsize +1);
 if(ptr == NULL) return 0;
 curlmem->response = ptr;
 memcpy(&(curlmem->response[curlmem->size]), data, realsize);
@@ -73,7 +67,6 @@ CURL *curl;
 CURLcode res;
 curl_mime *mime;
 curl_mimepart *part;
-
 bool uploadflag = true;
 int ret;
 
@@ -112,16 +105,20 @@ if(curl)
 	res = curl_easy_perform(curl);
 	if(res == CURLE_OK)
 		{
-		fprintf(stdout, "upload done\n");
-		if(removeflag == true)
-			{
-			ret = remove(sendcapname);
-			if(ret != 0) fprintf(stdout, "couldn't remove %s\n", sendcapname);
-			}
 		if(curlmem->response != NULL)
 			{
 			fprintf(stdout, "\n%s\n\n", curlmem->response);
+			if(removeflag == true)
+				{
+				ret = remove(sendcapname);
+				if(ret != 0) fprintf(stdout, "couldn't remove %s\n", sendcapname);
+				}
 			free(curlmem->response);
+			}
+		else
+			{
+			fprintf(stdout, "upload not confirmed by server\n");
+			uploadflag = false;
 			}
 		}
 	else
@@ -161,7 +158,7 @@ fprintf(stdout, "%s %s (C) %s ZeroBeat\n"
 	"-e <email address> : set email address, if required\n"
 	"-R                 : remove cap if upload was successful\n"
 	"-h                 : this help\n"
-	"-h                 : show version\n"
+	"-v                 : show version\n"
 	"\n"
 	"Do not merge different cap files to a single cap file.\n"
 	"This will lead to unexpected behaviour on ESSID changes\n"

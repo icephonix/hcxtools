@@ -1,28 +1,24 @@
 #define _GNU_SOURCE
 #include <ctype.h>
-#include <dirent.h>
-#include <fcntl.h>
-#include <ftw.h>
 #include <libgen.h>
 #include <pwd.h>
-#include <stdarg.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
-#include <utime.h>
+
 #include <curl/curl.h>
 
 #include "include/strings.c"
+#include "include/fileops.c"
 
 #define LINEBUFFER_MAX	256
 #define OUIBUFFER_MAX	8192
 
-const char *ouiurl = "https://standards-oui.ieee.org/oui/oui.txt";
+static const char *ouiurl = "https://standards-oui.ieee.org/oui/oui.txt";
 
 /*===========================================================================*/
 static bool downloadoui(char *ouiname)
@@ -41,7 +37,7 @@ if((fhouitmp = tmpfile()) == NULL)
 	return false;
 	}
 hnd = curl_easy_init ();
-curl_easy_setopt(hnd, CURLOPT_URL, "https://standards-oui.ieee.org/oui/oui.txt");
+curl_easy_setopt(hnd, CURLOPT_URL, ouiurl);
 curl_easy_setopt(hnd, CURLOPT_NOPROGRESS, 1L);
 curl_easy_setopt(hnd, CURLOPT_MAXREDIRS, 5L);
 curl_easy_setopt(hnd, CURLOPT_WRITEDATA, fhouitmp);
@@ -67,38 +63,6 @@ while (!feof(fhouitmp))
 fclose(fhoui);
 fprintf(stdout, "\ndownload finished\n");
 return true;
-}
-/*===========================================================================*/
-static size_t chop(char *buffer,  size_t len)
-{
-static char *ptr;
-
-ptr = buffer +len -1;
-while (len) {
-	if (*ptr != '\n') break;
-	*ptr-- = 0;
-	len--;
-	}
-
-while (len) {
-	if (*ptr != '\r') break;
-	*ptr-- = 0;
-	len--;
-	}
-return len;
-}
-/*---------------------------------------------------------------------------*/
-static int fgetline(FILE *inputstream, size_t size, char *buffer)
-{
-if (feof(inputstream)) return -1;
-		char *buffptr = fgets (buffer, size, inputstream);
-
-	if (buffptr == NULL) return -1;
-
-	size_t len = strlen(buffptr);
-	len = chop(buffptr, len);
-
-return len;
 }
 /*===========================================================================*/
 static void getessidinfo(char *essidname)
@@ -127,7 +91,7 @@ for(p = 0; p < l; p++)
 	}
 
 memset(&essidbuffer, 0, 66);
-if(hex2bin(essidname, essidbuffer, l /2) == false)
+if(hex2bin(essidname, essidbuffer, l /2) == -1)
 	{
 	fprintf(stderr, "not a valid ESSID hex string\n");
 	return;
@@ -191,7 +155,7 @@ if((l%2 != 0) || (l > 64))
 	return;
 	}
 memset(&essidbuffer, 0, 66);
-if(hex2bin(essidptr, essidbuffer, l /2) == false)
+if(hex2bin(essidptr, essidbuffer, l /2) == -1)
 	{
 	fprintf(stderr, "wrong ESSID %s\n", essidptr);
 	return;
@@ -434,7 +398,7 @@ fprintf(stdout, "%s %s (C) %s ZeroBeat\n"
 	"usage: %s <options>\n"
 	"\n"
 	"options:\n"
-	"-d            : download https://standards-oui.ieee.org/oui/oui.txt\n"
+	"-d            : download %s\n"
 	"              : and save to ~/.hcxtools/oui.txt\n"
 	"              : internet connection required\n"
 	"-m <mac>      : mac (six bytes of mac addr) or \n"
@@ -445,7 +409,7 @@ fprintf(stdout, "%s %s (C) %s ZeroBeat\n"
 	"-x <xdigit>   : input ESSID in hex\n"
 	"-v <vendor>   : vendor name\n"
 	"-h            : this help screen\n"
-	"\n", eigenname, VERSION_TAG, VERSION_YEAR, eigenname);
+	"\n", eigenname, VERSION_TAG, VERSION_YEAR, eigenname, ouiurl);
 exit(EXIT_SUCCESS);
 }
 /*===========================================================================*/
@@ -468,9 +432,9 @@ static char *essidname = NULL;
 static char *hash16800line = NULL;
 static char *hash2500line = NULL;
 static char *ouiname = NULL;
-static char *confdirname = ".hcxtools";
-static char *ouinameuser = ".hcxtools/oui.txt";
-static char *ouinamesystemwide = "/usr/share/ieee-data/oui.txt";
+static char confdirname[] = ".hcxtools";
+static char ouinameuser[] = ".hcxtools/oui.txt";
+static char ouinamesystemwide[] = "/usr/share/ieee-data/oui.txt";
 
 static char pmkidtype[] = {"WPA*01*" };
 static char eapoltype[] = {"WPA*02*" };
@@ -620,16 +584,16 @@ if(ouiname == NULL)
 	{
 	fprintf(stderr, "failed read oui.txt\n"
 			"use download option -d to download it\n"
-			"or download file https://standards-oui.ieee.org/oui/oui.txt\n"
-			"and save it to ~/.hcxtools/oui.txt\n");
+			"or download file %s\n"
+			"and save it to ~/.hcxtools/oui.txt\n", ouiurl);
 	exit(EXIT_FAILURE);
 	}
 if(stat(ouiname, &statinfo) < 0)
 	{
 	fprintf(stderr, "failed read oui.txt\n"
 			"use download option -d to download it\n"
-			"or download file https://standards-oui.ieee.org/oui/oui.txt\n"
-			"and save it to ~/.hcxtools/oui.txt\n");
+			"or download file %s\n"
+			"and save it to ~/.hcxtools/oui.txt\n", ouiurl);
 	exit(EXIT_FAILURE);
 	}
 if(mode == 'm')
